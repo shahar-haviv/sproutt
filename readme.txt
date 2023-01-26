@@ -3,7 +3,7 @@ to get in the virtual env
 to get out the virtual env 
 deactivate
 installing pakeges in the vierual env 
-pip install -r requirements.txt
+py -m pip install -r requirements.txt
 py -m pip install {PAKAGE NAME}
 
 runnig the code in the virtual env 
