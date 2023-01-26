@@ -1,16 +1,10 @@
-from service import read_logss
-
-from dto.request import GetAvregeBodyRequest
+from service import calculate_Customer_Information
+from dto.request import CalculateCustomerInformation
 
 from fastapi import FastAPI , Query
 
 app = FastAPI()
 
-@app.get("/{type}/average")
-def read_logs(type: str , froma: str = Query(default=None ,  max_length=16), to: str = Query(default=None ,  max_length=16)):
-    return read_logss(type, froma, to)
-
-
-@app.post("/average")
-def read_item(item: GetAvregeBodyRequest):
-    return read_logss(item.type, item.froma, item.to)
+@app.post("/calculatecustomerinformation")
+def read_item(calculateCustomerInformation: CalculateCustomerInformation):
+    return calculate_Customer_Information(calculateCustomerInformation)

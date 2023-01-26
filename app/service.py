@@ -1,43 +1,73 @@
-from datetime import datetime
-
-from dto.request import ReturnToClient
-
-# from db.db import db
-
-from datetime import datetime, tzinfo, timezone
-
-def _read_from_file_logss_and_avrg(type:str ,formadate:str , todate:str) ->ReturnToClient:
- counter = 0
- entitymass=0
- entity_mass_avg=0
- with open(f'xg-{type}-1min-avg.log') as logs_document:
-        lines = logs_document.readlines()
-        for line in lines:
-            if (formadate <= datetime.fromtimestamp(float(line.split(",")[0])) <= todate):
-                counter += 1
-                entitymass += float(line.split(",")[2])
-        if counter > 0 :
-            entity_mass_avg= entitymass/counter
- return ReturnToClient(type , entity_mass_avg , counter)
- 
-
-# didnt finish
-# def _read_from_db_logss_and_avrg(type:str ,formadate:str , todate:str) ->ReturnToClient:
-#     print(formadate)
-#     logs = db.planets_tests_dev.find(
-#         {'logTime': {
-#         '$gte': datetime(2019, 1, 1, 0, 0, 0, tzinfo=timezone.utc), 
-#         '$lt': datetime(2019, 9, 2, 0, 0, 0, tzinfo=timezone.utc)
-#     }, 
-#     'name': 'earth'
-# }
-#     )
-#     print(logs)
-    # return ReturnToClient(type , entity_mass_avg , counter)
+import pandas as pd
+from pandas import DataFrame
+from fastapi import HTTPException
+from dto.request import (
+    CalculateCustomerInformation,
+    ReturnToClientCalculateCustomerInformation,
+)
+from utils.consts import *
+from utils.ratesenum import HealthClassToNumber
 
 
+def _Chek_Health_Class(weight: int, row):
+    if row["Declined"].values[0] <= weight:
+        return "Declined"
+    elif row["Standard"].values[0] <= weight:
+        return "Standard"
+    elif row["Standard Plus"].values[0] <= weight:
+        return "Standard Plus"
+    elif row["Preferred"].values[0] <= weight:
+        return "Preferred"
+    elif row["Preferred Plus"].values[0] <= weight:
+        return "Preferred Plus"
+    raise HTTPException(status_code=400, detail="Under weight we cannt insure him")
 
-def read_logss(type:str ,froma:str , to:str ):
-    formadate = datetime.fromisoformat(froma)
-    todate = datetime.fromisoformat(to)
-    return _read_from_file_logss_and_avrg(type , formadate , todate) 
+
+def _Get_Rates_Df():
+    df = pd.read_excel("./Rates-table.xlsx", "Full rates")
+    df.columns.values[0] = "Term"
+    df.columns.values[1] = "Age"
+    return df
+
+
+def _Chek_Rates(RowRates: DataFrame, HealthClass: str, coverage: int):
+    if 999999 <= coverage:
+        return _Match_Health_Class_To_Factor(RowRates, HealthClass, step999)
+    elif 499999 <= coverage:
+        return _Match_Health_Class_To_Factor(RowRates, HealthClass, step499)
+    elif 250000 <= coverage:
+        return _Match_Health_Class_To_Factor(RowRates, HealthClass, step250)
+    raise HTTPException(status_code=400, detail="coverage amount isnt insurabele")
+
+
+def _Match_Health_Class_To_Factor(RowRates: DataFrame, HealthClass: str, prefix: int):
+    ColumIndex = (
+        HealthClassToNumber[HealthClass.strip().replace(" ", "")].value + prefix
+    )
+    factor = RowRates.iloc[:, [ColumIndex]].values[0][0]
+    return factor
+
+
+def calculate_Customer_Information(
+    calculateCustomerInformation: CalculateCustomerInformation,
+):
+    HealthClassDf = pd.read_excel("./healthClassCleand.xlsx")
+    RowHealthClass = HealthClassDf.loc[
+        (HealthClassDf["Height"] == calculateCustomerInformation.height)
+    ]
+    HealthClass = _Chek_Health_Class(
+        calculateCustomerInformation.weight, RowHealthClass
+    )
+    RatesDf = _Get_Rates_Df()
+    RowRates = RatesDf.loc[
+        (RatesDf["Term"] == calculateCustomerInformation.term)
+        & (RatesDf["Age"] == calculateCustomerInformation.age)
+    ]
+    factor = _Chek_Rates(RowRates, HealthClass, calculateCustomerInformation.coverage)
+    price = calculateCustomerInformation.coverage / 1000 * factor
+    return {
+        "price": price,
+        "health-class": HealthClass,
+        "teram": calculateCustomerInformation.term,
+        "coverage": calculateCustomerInformation.coverage,
+    }
